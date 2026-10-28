@@ -1,0 +1,49 @@
+
+name: Build SwingCheck APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Scarica il progetto
+        uses: actions/checkout@v4
+
+      - name: Installa Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configura Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Installa strumenti Android
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Estrai il progetto
+        run: |
+          unzip -q SwingCheck_Android_Project.zip -d extracted
+          cp extracted/SwingCheckAndroid/settings.gradle .
+          cp extracted/SwingCheckAndroid/build.gradle .
+          cp extracted/SwingCheckAndroid/gradle.properties .
+          cp -R extracted/SwingCheckAndroid/app .
+
+      - name: Compila APK
+        uses: gradle/gradle-build-action@v3
+        with:
+          gradle-version: '8.9'
+          arguments: assembleDebug
+
+      - name: Salva APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SwingCheck-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
