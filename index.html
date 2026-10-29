@@ -59,12 +59,16 @@ async function setup(){
    'https://unpkg.com/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs',
    'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs'
   ];
-  for(const url of moduleUrls){
+  const moduleUrls = [
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs'
+];{
    try{ vision=await import(url); if(vision?.FilesetResolver && vision?.PoseLandmarker) break; vision=null; throw new Error('Il modulo non espone le funzioni attese'); }
    catch(err){importErrors.push(url+' → '+String(err?.message||err));}
   }
   if(!vision) throw new Error('Impossibile scaricare il motore MediaPipe da tutti i CDN. Verifica internet, VPN/firewall e ricarica la pagina. Dettagli: '+importErrors.join(' | '));
-  const files=await vision.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm');
+  const files=const files = await vision.FilesetResolver.forVisionTasks(
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm/'
+);
   landmarker=await vision.PoseLandmarker.createFromOptions(files,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',delegate:'CPU'},runningMode:'VIDEO',numPoses:1});
   ready=true;status('Motore pronto. Seleziona il video e vai vicino al fotogramma d’impatto.');
  }catch(e){setupError=String(e?.message||e);status('Motore AI non caricato: '+setupError+'. Controlla internet, aggiorna Android System WebView/Chrome e riapri l’app.');}
