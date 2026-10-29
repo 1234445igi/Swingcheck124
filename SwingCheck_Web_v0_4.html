@@ -1,0 +1,134 @@
+<!doctype html><html lang="it"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#071712"><title>SwingCheck Web - Analisi swing</title>
+<style>
+:root{--bg:#071712;--panel:#10251e;--green:#39e59a;--muted:#a8c4b8;--line:#285442}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#f3fff8;font:16px system-ui,sans-serif}
+main{max-width:1000px;margin:auto;padding:20px} @media(min-width:760px){main{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}header,.chips,.footer{grid-column:1/-1}.card{margin:0}.frame video{max-height:62vh}}header{display:flex;align-items:center;gap:12px;margin:4px 0 18px}
+.logo{width:48px;height:48px;border:2px solid var(--green);border-radius:14px;display:grid;place-items:center;color:var(--green);font-size:25px}
+h1{margin:0;font-size:24px}h1 span{color:var(--green)}h2{font-size:18px;margin:4px 0 10px}.muted{font-size:13px;color:var(--muted);line-height:1.45}
+.chips{display:flex;gap:7px;flex-wrap:wrap;margin:12px 0}.chip{border:1px solid var(--line);border-radius:999px;padding:7px 10px;font-size:12px}.chip b{color:var(--green)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;margin:12px 0}
+button,.upload{display:block;width:100%;padding:13px;border:0;border-radius:11px;background:var(--green);color:#062015;font-weight:750;text-align:center;font-size:15px}
+.secondary{background:#18392c;color:white;border:1px solid #2c634a;margin-top:9px}input[type=file]{display:none}
+.frame{position:relative;background:#000;border-radius:12px;overflow:hidden;margin-top:12px;min-height:160px}
+video{display:block;width:100%;max-height:55vh;background:#000}canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.metric{padding:11px;border:1px solid var(--line);border-radius:12px;background:#091b14}.metric small{display:block;color:var(--muted);font-size:12px}.metric strong{display:block;color:var(--green);font-size:21px;margin-top:4px}
+.status{padding:10px;border-radius:10px;background:#0a1c15;color:var(--muted);font-size:12px;line-height:1.4}.warn{color:#ffe2a1}.footer{text-align:center;color:var(--muted);font-size:11px;padding:15px}
+</style></head><body><main>
+<header><div class="logo">⛳</div><div><h1>Swing<span>Check</span></h1><div class="muted">Analisi swing · versione web 0.4</div></div></header>
+<div class="chips"><span class="chip">Vista <b>Frontale</b></span><span class="chip">Fase <b>Impatto</b></span><span class="chip">Livello <b>Avanzato</b></span></div>
+<section class="card"><h2>1. Carica il video</h2><p class="muted">Versione per computer: apri questa pagina con Chrome o Edge da un sito HTTPS (ad esempio GitHub Pages). Riprendi il corpo intero frontalmente, con telefono fermo e buona luce. Serve internet per caricare il motore AI e il modello.</p>
+<label class="upload" for="file">＋ Seleziona video dalla galleria</label><input id="file" type="file" accept="video/*">
+<div class="frame" id="frame" hidden><video id="video" controls playsinline></video><canvas id="overlay"></canvas></div>
+<button id="analyze" class="secondary" disabled>Analizza fotogramma selezionato</button><button id="reportBtn" class="secondary" disabled>Genera report finale</button><p id="status" class="status">In attesa di un video. I risultati appariranno soltanto se il rilevamento funziona.</p></section>
+<section class="card"><h2>2. Angoli stimati nel fotogramma</h2><div class="grid">
+<div class="metric"><small>Inclinazione busto</small><strong id="torso">—</strong></div>
+<div class="metric"><small>Linea spalle</small><strong id="shoulders">—</strong></div>
+<div class="metric"><small>Linea bacino</small><strong id="hips">—</strong></div>
+<div class="metric"><small>Ginocchio sinistro</small><strong id="kneeL">—</strong></div>
+<div class="metric"><small>Ginocchio destro</small><strong id="kneeR">—</strong></div>
+<div class="metric"><small>Gomito sinistro</small><strong id="elbowL">—</strong></div>
+<div class="metric"><small>Gomito destro</small><strong id="elbowR">—</strong></div>
+<div class="metric"><small>Confidenza punti</small><strong id="confidence">—</strong></div></div>
+<p class="muted">Gli angoli sono stime 2D dal video, non misure cliniche o una valutazione completa della biomeccanica 3D.</p></section>
+<section class="card" id="reportCard"><h2>3. Report finale</h2><p class="muted" id="reportIntro">Carica un video, seleziona il fotogramma da analizzare e premi “Analizza fotogramma selezionato”. Poi genera il report.</p><div id="report" class="status">Il report non è ancora disponibile.</div><button id="downloadReport" class="secondary" disabled>Esporta report .txt</button></section>
+<section class="card"><h2>Come ottenere un video utile</h2><p class="muted">Inquadra testa, piedi e mani; registra da davanti; evita zoom e riprese mosse. Per trovare l'impatto, metti in pausa il video vicino al contatto con la palla e premi Analizza fotogrammi.</p></section>
+<div class="footer">Il video viene elaborato nel browser del computer; libreria, modello e componenti AI vengono scaricati da internet. Per sicurezza, usa una pagina HTTPS. I risultati sono stime 2D.</div>
+</main>
+<script type="module">
+const $=id=>document.getElementById(id), video=$('video'), canvas=$('overlay'), ctx=canvas.getContext('2d');
+let landmarker=null, ready=false, running=false, latestReport='', setupError='';
+const status=(s)=>$('status').textContent=s;
+function angle(a,b,c){const v1=[a.x-b.x,a.y-b.y],v2=[c.x-b.x,c.y-b.y];const d=v1[0]*v2[0]+v1[1]*v2[1],m1=Math.hypot(...v1),m2=Math.hypot(...v2);if(!m1||!m2)return null;return Math.acos(Math.max(-1,Math.min(1,d/(m1*m2))))*180/Math.PI}
+function lineAngle(a,b){return Math.atan2((b.y-a.y),(b.x-a.x))*180/Math.PI}
+function draw(lm){
+ const w=video.videoWidth,h=video.videoHeight;if(!w||!h)return;canvas.width=w;canvas.height=h;ctx.clearRect(0,0,w,h);
+ const pairs=[[11,12],[11,13],[13,15],[12,14],[14,16],[11,23],[12,24],[23,24],[23,25],[25,27],[24,26],[26,28]];
+ ctx.lineWidth=Math.max(3,w/180);ctx.strokeStyle='#39e59a';ctx.fillStyle='#ffca55';
+ for(const [a,b] of pairs){if(lm[a].visibility>.35&&lm[b].visibility>.35){ctx.beginPath();ctx.moveTo(lm[a].x*w,lm[a].y*h);ctx.lineTo(lm[b].x*w,lm[b].y*h);ctx.stroke()}}
+ lm.forEach(p=>{if(p.visibility>.35){ctx.beginPath();ctx.arc(p.x*w,p.y*h,Math.max(3,w/120),0,Math.PI*2);ctx.fill()}});
+}
+async function setup(){
+ try{
+  status('Caricamento del modello di rilevamento… serve una connessione internet.');
+  // Import robusto: prova il file ESM ufficiale su più CDN.
+  let vision=null, importErrors=[];
+  const moduleUrls=[
+   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs',
+   'https://unpkg.com/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs',
+   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision/vision_bundle.mjs'
+  ];
+  for(const url of moduleUrls){
+   try{ vision=await import(url); if(vision?.FilesetResolver && vision?.PoseLandmarker) break; vision=null; throw new Error('Il modulo non espone le funzioni attese'); }
+   catch(err){importErrors.push(url+' → '+String(err?.message||err));}
+  }
+  if(!vision) throw new Error('Impossibile scaricare il motore MediaPipe da tutti i CDN. Verifica internet, VPN/firewall e ricarica la pagina. Dettagli: '+importErrors.join(' | '));
+  const files=await vision.FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm');
+  landmarker=await vision.PoseLandmarker.createFromOptions(files,{baseOptions:{modelAssetPath:'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',delegate:'CPU'},runningMode:'VIDEO',numPoses:1});
+  ready=true;status('Motore pronto. Seleziona il video e vai vicino al fotogramma d’impatto.');
+ }catch(e){setupError=String(e?.message||e);status('Motore AI non caricato: '+setupError+'. Controlla internet, aggiorna Android System WebView/Chrome e riapri l’app.');}
+}
+$('file').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;video.src=URL.createObjectURL(f);$('frame').hidden=false;$('analyze').disabled=false;video.load();status('Video caricato. Riproducilo o mettilo in pausa vicino all’impatto, poi premi Analizza fotogrammi.')});
+$('analyze').addEventListener('click',async()=>{
+ if(!ready){status(setupError ? 'Il motore AI non è partito: '+setupError+'. Chiudi e riapri l’app con internet attivo.' : 'Il motore è ancora in caricamento. Attendi qualche secondo con internet attivo e riprova.');return}
+ if(!video.videoWidth){status('Il video non è pronto. Premi play una volta e riprova.');return}
+ try{
+  const result=landmarker.detectForVideo(video,performance.now());const pose=result.landmarks?.[0];
+  if(!pose){status('Non è stato rilevato il corpo. Prova un video più luminoso con il corpo intero visibile.');return}
+  draw(pose);
+  const vis=ids=>ids.every(i=>(pose[i].visibility??0)>.35);
+  const fmt=v=>v==null?'Non disponibile':Math.round(v)+'°';
+  $('torso').textContent=vis([11,23])?fmt(Math.abs(lineAngle(pose[11],pose[23])-90)): 'Non rilevato';
+  $('shoulders').textContent=vis([11,12])?fmt(lineAngle(pose[11],pose[12])):'Non rilevato';
+  $('hips').textContent=vis([23,24])?fmt(lineAngle(pose[23],pose[24])):'Non rilevato';
+  $('kneeL').textContent=vis([23,25,27])?fmt(angle(pose[23],pose[25],pose[27])):'Non rilevato';
+  $('kneeR').textContent=vis([24,26,28])?fmt(angle(pose[24],pose[26],pose[28])):'Non rilevato';
+  $('elbowL').textContent=vis([11,13,15])?fmt(angle(pose[11],pose[13],pose[15])):'Non rilevato';
+  $('elbowR').textContent=vis([12,14,16])?fmt(angle(pose[12],pose[14],pose[16])):'Non rilevato';
+  const ids=[11,12,13,14,15,16,23,24,25,26,27,28],avg=ids.reduce((s,i)=>s+(pose[i].visibility??0),0)/ids.length;
+  $('confidence').textContent=Math.round(avg*100)+'%';
+  $('reportBtn').disabled=false;
+  $('reportIntro').textContent='Fotogramma analizzato a '+video.currentTime.toFixed(2)+' secondi. Premi “Genera report finale” per ottenere un riepilogo.';
+  status('Analisi completata. Angoli e confidenza aggiornati; ora puoi generare il report.');
+ }catch(e){status('Errore durante l’analisi: '+e.message)}
+});
+
+$('reportBtn').addEventListener('click',()=>{
+ const val=id=>$(id).textContent;
+ const numeric=id=>{const n=parseFloat(val(id));return Number.isFinite(n)?n:null};
+ const conf=numeric('confidence');
+ const lines=[];
+ lines.push('SWINGCHECK — REPORT DI ANALISI 2D');
+ lines.push('Data: '+new Date().toLocaleString('it-IT'));
+ lines.push('Video: '+(video.currentSrc||'video caricato')+' | Fotogramma: '+video.currentTime.toFixed(2)+' s');
+ lines.push(''); lines.push('MISURE STIMATE');
+ lines.push('Inclinazione busto: '+val('torso'));
+ lines.push('Linea spalle: '+val('shoulders'));
+ lines.push('Linea bacino: '+val('hips'));
+ lines.push('Ginocchio sinistro: '+val('kneeL'));
+ lines.push('Ginocchio destro: '+val('kneeR'));
+ lines.push('Gomito sinistro: '+val('elbowL'));
+ lines.push('Gomito destro: '+val('elbowR'));
+ lines.push('Confidenza punti: '+val('confidence'));
+ lines.push(''); lines.push('NOTE AUTOMATICHE');
+ if(conf===null || conf<55) lines.push('Affidabilità limitata: una parte dei punti del corpo è poco visibile. Ripeti la ripresa con tutto il corpo inquadrato, buona luce e telefono fermo.');
+ else lines.push('La maggior parte dei punti selezionati è stata rilevata. Verifica comunque visivamente lo scheletro sovrapposto al corpo.');
+ const kL=numeric('kneeL'),kR=numeric('kneeR');
+ if(kL!==null&&kR!==null&&Math.abs(kL-kR)>12) lines.push('I due angoli del ginocchio differiscono di oltre 12° in questo fotogramma. Controlla prospettiva, postura e posizionamento dei punti: non è automaticamente un errore tecnico.');
+ else if(kL!==null&&kR!==null) lines.push('Gli angoli dei due ginocchi risultano relativamente simili in questo fotogramma; la simmetria non è di per sé un obiettivo obbligatorio nello swing.');
+ lines.push(''); lines.push('LIMITI');
+ lines.push('Queste sono stime geometriche 2D di un singolo fotogramma, non una valutazione completa del movimento né una misura 3D. I valori dipendono da prospettiva, occlusioni, abbigliamento e qualità del video. Il report non formula diagnosi mediche. Per valutare l’intero swing occorre analizzare più fasi e, idealmente, riprese frontale e laterale.');
+ latestReport=lines.join('\n');
+ $('report').textContent=latestReport;
+ $('downloadReport').disabled=false;
+ status('Report generato. Puoi esportarlo come file di testo.');
+});
+$('downloadReport').addEventListener('click',()=>{
+ if(!latestReport)return;
+ const blob=new Blob([latestReport],{type:'text/plain;charset=utf-8'});
+ const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='SwingCheck_report.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+});
+
+setup();
+</script></body></html>
