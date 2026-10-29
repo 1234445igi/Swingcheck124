@@ -49,26 +49,35 @@ function draw(lm){
  for(const [a,b] of pairs){if(lm[a].visibility>.35&&lm[b].visibility>.35){ctx.beginPath();ctx.moveTo(lm[a].x*w,lm[a].y*h);ctx.lineTo(lm[b].x*w,lm[b].y*h);ctx.stroke()}}
  lm.forEach(p=>{if(p.visibility>.35){ctx.beginPath();ctx.arc(p.x*w,p.y*h,Math.max(3,w/120),0,Math.PI*2);ctx.fill()}});
 }
-async function setup(){
- try{
-  status('Caricamento del modello di rilevamento… serve una connessione internet.');
-  // Import robusto: prova il file ESM ufficiale su più CDN.
-  let vision=null, importErrors=[];
-const moduleUrls = [
-  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs'
-];
-  for (const url of moduleUrls) {
+async function setup() {
   try {
-    vision = await import(url);
-    if (vision?.FilesetResolver && vision?.PoseLandmarker) break;
-    vision = null;
-    throw new Error('Il modulo non espone le funzioni attese');
-  } catch (err) {
-    importErrors.push(url + ' → ' + String(err?.message || err));
+    status('Caricamento del motore AI...');
+
+    const vision = await import(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs'
+    );
+
+    const files = await vision.FilesetResolver.forVisionTasks(
+      'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/wasm'
+    );
+
+    landmarker = await vision.PoseLandmarker.createFromOptions(files, {
+      baseOptions: {
+        modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+        delegate: 'CPU'
+      },
+      runningMode: 'VIDEO',
+      numPoses: 1
+    });
+
+    ready = true;
+    status('Motore pronto. Seleziona il video e vai vicino al fotogramma d’impatto.');
+  } catch (e) {
+    setupError = e?.message || String(e);
+    console.error('Errore MediaPipe:', e);
+    status('Motore AI non caricato: ' + setupError);
   }
 }
-
-];{
    try{ vision=await import(url); if(vision?.FilesetResolver && vision?.PoseLandmarker) break; vision=null; throw new Error('Il modulo non espone le funzioni attese'); }
    catch(err){importErrors.push(url+' → '+String(err?.message||err));}
   }
@@ -80,7 +89,36 @@ const moduleUrls = [
   ready=true;status('Motore pronto. Seleziona il video e vai vicino al fotogramma d’impatto.');
  }catch(e){setupError=String(e?.message||e);status('Motore AI non caricato: '+setupError+'. Controlla internet, aggiorna Android System WebView/Chrome e riapri l’app.');}
 }
-$('file').addEventListener('change',e=>{const f=e.target.files?.[0];if(!f)return;video.src=URL.createObjectURL(f);$('frame').hidden=false;$('analyze').disabled=false;video.load();status('Video caricato. Riproducilo o mettilo in pausa vicino all’impatto, poi premi Analizza fotogrammi.')});
+let videoURL = null;
+
+$('file').addEventListener('change', e => {
+  const f = e.target.files?.[0];
+  if (!f) return;
+
+  if (videoURL) URL.revokeObjectURL(videoURL);
+
+  videoURL = URL.createObjectURL(f);
+
+  $('frame').hidden = false;
+  $('analyze').disabled = true;
+  $('reportBtn').disabled = true;
+
+  video.onerror = () => {
+    status('Impossibile leggere il video. Prova un MP4 compatibile con H.264 e audio AAC.');
+  };
+
+  video.onloadedmetadata = () => {
+    $('analyze').disabled = false;
+    status(
+      'Video caricato correttamente. Durata: ' +
+      video.duration.toFixed(1) +
+      ' secondi. Metti in pausa vicino all’impatto e premi Analizza.'
+    );
+  };
+
+  video.src = videoURL;
+  video.load();
+});
 $('analyze').addEventListener('click',async()=>{
  if(!ready){status(setupError ? 'Il motore AI non è partito: '+setupError+'. Chiudi e riapri l’app con internet attivo.' : 'Il motore è ancora in caricamento. Attendi qualche secondo con internet attivo e riprova.');return}
  if(!video.videoWidth){status('Il video non è pronto. Premi play una volta e riprova.');return}
