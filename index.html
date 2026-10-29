@@ -54,9 +54,20 @@ async function setup(){
   status('Caricamento del modello di rilevamento… serve una connessione internet.');
   // Import robusto: prova il file ESM ufficiale su più CDN.
   let vision=null, importErrors=[];
-  ];
-  const moduleUrls = [
+const moduleUrls = [
   'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.22/vision_bundle.mjs'
+];
+  for (const url of moduleUrls) {
+  try {
+    vision = await import(url);
+    if (vision?.FilesetResolver && vision?.PoseLandmarker) break;
+    vision = null;
+    throw new Error('Il modulo non espone le funzioni attese');
+  } catch (err) {
+    importErrors.push(url + ' → ' + String(err?.message || err));
+  }
+}
+
 ];{
    try{ vision=await import(url); if(vision?.FilesetResolver && vision?.PoseLandmarker) break; vision=null; throw new Error('Il modulo non espone le funzioni attese'); }
    catch(err){importErrors.push(url+' → '+String(err?.message||err));}
